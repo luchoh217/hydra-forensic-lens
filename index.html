@@ -200,7 +200,7 @@
 
       <div class="url-box">
         <input type="text" id="url-input" placeholder="Pega una URL sospechosa (ej: https://bit.ly/3xYz o https://ejemplo.com)" />
-        <button id="btn-scan-url">ANALIZAR</button>
+        <button id="btn-scan-url">AUDITAR</button>
       </div>
 
       <div id="url-output" class="output">Ingresa una URL para auditar redirecciones, rastreadores ocultos, homógrafos y registros DNS reales (A, MX, TXT/DMARC) sin visitar el sitio...</div>
@@ -362,6 +362,10 @@
       }
 
       const host = parsed.hostname.toLowerCase();
+
+      const isIpv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+      const isPrivateIp = host === "localhost" || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
+
       const alerts = [];
 
       if (parsed.protocol !== 'https:') alerts.push('⚠️ Conexión sin cifrado HTTPS (HTTP plano)');
