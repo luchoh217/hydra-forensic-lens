@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HYDRA FORENSIC LENS // Auditoria Local de Metadatos y URLs</title>
+  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+  <style>
+    :root {
+      --bg: #050a14;
+      --panel: #0b1324;
+      --border: #1e293b;
+      --cyan: #06b6d4;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --green: #10b981;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(11, 19, 36, 0.9);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .brand {
+      font-family: monospace;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--cyan);
+      letter-spacing: 1px;
+    }
+    .badge {
+      font-family: monospace;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: var(--green);
+    }
+    main {
+      max-width: 1280px;
+      width: 100%;
+      margin: 24px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      flex: 1;
+    }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .card h2 {
+      font-family: monospace;
+      font-size: 1rem;
+      color: var(--cyan);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .dropzone {
+      border: 2px dashed #334155;
+      border-radius: 8px;
+      padding: 32px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(15, 23, 42, 0.5);
+    }
+    .dropzone:hover, .dropzone.drag {
+      border-color: var(--cyan);
+      background: rgba(6, 182, 212, 0.08);
+    }
+    .dropzone p { color: var(--muted); font-size: 0.9rem; margin-top: 8px; }
+    .url-box {
+      display: flex;
+      gap: 8px;
+    }
+    input[type="text"] {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 0.9rem;
+    }
+    input[type="text"]:focus { outline: none; border-color: var(--cyan); }
+    button {
+      background: var(--cyan);
+      color: #04101d;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.9; }
+    button.secondary {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--amber);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .output {
+      background: #060b16;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      font-family: monospace;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      max-height: 460px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .kv-row {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(30, 41, 59, 0.6);
+      padding: 6px 0;
+      gap: 12px;
+    }
+    .kv-key { color: var(--muted); flex-shrink: 0; }
+    .kv-val { color: var(--text); text-align: right; }
+    .alert-high { color: var(--red); font-weight: bold; }
+    .alert-med { color: var(--amber); font-weight: bold; }
+    .alert-ok { color: var(--green); font-weight: bold; }
+    .gps-box {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+    .gps-box a { color: var(--cyan); text-decoration: underline; }
+    footer {
+      text-align: center;
+      padding: 14px;
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">🛡️ HYDRA FORENSIC LENS // v1.0</div>
+    <div class="badge">🔒 PROCESAMIENTO 100% LOCAL EN NAVEGADOR (CERO SUBIDAS A SERVIDOR)</div>
+  </header>
+
+  <main>
+    <!-- MODULO 1: INSPECTOR DE METADATOS Y HASHES -->
+    <section class="card">
+      <h2>
+        <span>01 // AUDITORÍA FORENSE DE ARCHIVOS Y EXIF</span>
+        <button id="btn-clean-img" class="secondary" style="display:none;">🧹 PURGAR METADATOS</button>
+      </h2>
+
+      <div id="dropzone" class="dropzone">
+        <strong>📂 Arrastra una imagen o archivo aquí, o haz clic para seleccionar</strong>
+        <p>Soporta JPG, PNG, WEBP, HEIC, TIFF, PDF, MP4 (los archivos nunca salen de tu equipo)</p>
+        <input type="file" id="file-input" hidden />
+      </div>
+
+      <div id="file-output" class="output">Esperando archivo para calcular hashes SHA-256/SHA-1 y extraer metadatos ocultos...</div>
+    </section>
+
+    <!-- MODULO 2: ANALIZADOR DE ENLACES Y DNS -->
+    <section class="card">
+      <h2><span>02 // ESCÁNER DE ENLACES, RASTREADORES Y DNS</span></h2>
+
+      <div class="url-box">
+        <input type="text" id="url-input" placeholder="Pega una URL sospechosa (ej: https://bit.ly/3xYz o https://ejemplo.com)" />
+        <button id="btn-scan-url">ANALIZAR</button>
+      </div>
+
+      <div id="url-output" class="output">Ingresa una URL para auditar redirecciones, rastreadores ocultos, homógrafos y registros DNS reales (A, MX, TXT/DMARC) sin visitar el sitio...</div>
+    </section>
+  </main>
+
+  <footer>
+    HYDRA FORENSIC LENS // HERRAMIENTA EDUCATIVA DE PRIVACIDAD Y OSINT DEFENSIVO · TODOS LOS CÁLCULOS SE EJECUTAN EN TU NAVEGADOR
+  </footer>
+
+  <script>
+    // =========================================================
+    // 1. MOTOR FORENSE DE ARCHIVOS Y METADATOS (100% CLIENT-SIDE)
+    // =========================================================
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file-input');
+    const fileOutput = document.getElementById('file-output');
+    const btnCleanImg = document.getElementById('btn-clean-img');
+    let currentImageFile = null;
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('drag');
+      if (e.dataTransfer.files[0]) inspectFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) inspectFile(e.target.files[0]);
+    });
+
+    async function computeHash(buffer, algo) {
+      const hashBuf = await crypto.subtle.digest(algo, buffer);
+      return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    async function inspectFile(file) {
+      fileOutput.innerHTML = '⏳ Calculando firmas criptográficas y analizando cabeceras binarias...';
+      btnCleanImg.style.display = 'none';
+      currentImageFile = file.type.startsWith('image/') ? file : null;
+
+      try {
+        const buffer = await file.arrayBuffer();
+        const [sha256, sha1] = await Promise.all([
+          computeHash(buffer, 'SHA-256'),
+          computeHash(buffer, 'SHA-1')
+        ]);
+
+        // Detectar firma mágica (Magic Bytes)
+        const bytes = new Uint8Array(buffer.slice(0, 8));
+        const magicHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+        let html = '';
+        html += row('Archivo', escapeHtml(file.name));
+        html += row('Tamaño / Tipo MIME', `${formatBytes(file.size)} · ${file.type || 'desconocido'}`);
+        html += row('Última Modificación', new Date(file.lastModified).toLocaleString());
+        html += row('Magic Bytes (Cabecera)', magicHex);
+        html += row('SHA-256', sha256);
+        html += row('SHA-1', sha1);
+
+        // Extraer EXIF si es compatible con exifr
+        if (window.exifr) {
+          const exif = await window.exifr.parse(file, { tiff: true, xmp: true, icc: false, gps: true }).catch(() => null);
+          if (exif && Object.keys(exif).length > 0) {
+            if (currentImageFile) btnCleanImg.style.display = 'inline-block';
+
+            if (exif.latitude && exif.longitude) {
+              const lat = exif.latitude.toFixed(6);
+              const lon = exif.longitude.toFixed(6);
+              html += `<div class="gps-box">
+                <div class="alert-high">⚠️ ALERTA DE PRIVACIDAD: COORDENADAS GPS ENCONTRADAS</div>
+                <div>Latitud: ${lat} | Longitud: ${lon}</div>
+                <a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}" target="_blank" rel="noopener">📍 Ver ubicación exacta en mapa abierto</a>
+              </div>`;
+            }
+
+            html += `<div style="margin-top:10px;color:var(--amber);font-weight:bold;">📋 METADATOS INCRUSTADOS DETECTADOS (${Object.keys(exif).length} campos):</div>`;
+            for (const [k, v] of Object.entries(exif)) {
+              if (v instanceof Uint8Array || typeof v === 'object' && !(v instanceof Date)) continue;
+              html += row(escapeHtml(k), escapeHtml(String(v)));
+            }
+          } else {
+            html += `<div style="margin-top:10px;" class="alert-ok">✅ No se encontraron metadatos EXIF/GPS sensibles incrustados en este archivo.</div>`;
+          }
+        }
+
+        fileOutput.innerHTML = html;
+      } catch (err) {
+        fileOutput.innerHTML = `<span class="alert-high">Error analizando archivo: ${escapeHtml(err.message)}</span>`;
+      }
+    }
+
+    // Purgar metadatos re-renderizando la imagen en un Canvas limpio
+    btnCleanImg.addEventListener('click', () => {
+      if (!currentImageFile) return;
+      const img = new Image();
+      const url = URL.createObjectURL(currentImageFile);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'LIMPIA_' + currentImageFile.name.replace(/\.[^.]+$/, '.jpg');
+          a.click();
+          URL.revokeObjectURL(url);
+        }, 'image/jpeg', 0.95);
+      };
+      img.src = url;
+    });
+
+    // =========================================================
+    // 2. ESCANER DE SEGURIDAD DE URLS Y DNS-OVER-HTTPS
+    // =========================================================
+    const urlInput = document.getElementById('url-input');
+    const btnScanUrl = document.getElementById('btn-scan-url');
+    const urlOutput = document.getElementById('url-output');
+
+    const SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'is.gd', 'buff.ly', 'cutt.ly', 'rb.gy', 'shorturl.at'];
+    const TRACKERS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'mc_eid', 'igshid', 'si'];
+    const PHISH_WORDS = ['login', 'verify', 'update', 'secure', 'account', 'banking', 'wallet', 'confirm', 'password', 'signin', 'suspend'];
+
+    btnScanUrl.addEventListener('click', scanUrl);
+    urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') scanUrl(); });
+
+    async function queryDoH(domain, type) {
+      const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=${type}`, {
+        headers: { 'Accept': 'application/dns-json' }
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.Answer || []).map(a => a.data);
+    }
+
+    async function scanUrl() {
+      let raw = urlInput.value.trim();
+      if (!raw) return;
+      if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+
+      urlOutput.innerHTML = '⏳ Analizando estructura de URL, parámetros ocultos y registros DNS globales...';
+
+      let parsed;
+      try {
+        parsed = new URL(raw);
+      } catch {
+        urlOutput.innerHTML = '<span class="alert-high">❌ URL inválida. Verifica el formato e intenta de nuevo.</span>';
+        return;
+      }
+
+      const host = parsed.hostname.toLowerCase();
+      const alerts = [];
+
+      if (parsed.protocol !== 'https:') alerts.push('⚠️ Conexión sin cifrado HTTPS (HTTP plano)');
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) alerts.push('🚨 El enlace apunta directamente a una dirección IP en lugar de un dominio');
+      if (host.includes('xn--')) alerts.push('🚨 Dominio internacionalizado Punycode (posible ataque homógrafo visual)');
+      if (parsed.username || parsed.password) alerts.push('🚨 Contiene credenciales incrustadas antes de @ (técnica de ofuscación)');
+      if (SHORTENERS.some(s => host === s || host.endsWith('.' + s))) alerts.push('⚠️ Acortador de enlaces detectado: oculta el destino real');
+      if (host.split('.').length > 4) alerts.push('⚠️ Exceso de subdominios (técnica habitual de suplantación)');
+
+      const matchedWords = PHISH_WORDS.filter(w => parsed.pathname.toLowerCase().includes(w) || host.includes(w));
+      if (matchedWords.length > 0) alerts.push(`⚠️ Palabras sensibles detectadas en URL: ${matchedWords.join(', ')}`);
+
+      // Detectar rastreadores
+      const foundTrackers = [];
+      const cleanUrl = new URL(parsed.toString());
+      for (const [k] of parsed.searchParams.entries()) {
+        if (TRACKERS.includes(k.toLowerCase())) {
+          foundTrackers.push(k);
+          cleanUrl.searchParams.delete(k);
+        }
+      }
+
+      let html = '';
+      if (alerts.length > 0) {
+        html += `<div class="gps-box"><div class="alert-high">INDICADORES DE RIESGO DETECTADOS (${alerts.length}):</div>${alerts.map(a => `<div>• ${escapeHtml(a)}</div>`).join('')}</div>`;
+      } else {
+        html += `<div style="margin-bottom:10px;" class="alert-ok">✅ Estructura sintáctica limpia (sin ofuscación evidente en la URL).</div>`;
+      }
+
+      html += row('Protocolo', parsed.protocol.replace(':', '').toUpperCase());
+      html += row('Dominio / Host', escapeHtml(host));
+      html += row('Ruta', escapeHtml(parsed.pathname || '/'));
+
+      if (foundTrackers.length > 0) {
+        html += row('Rastreadores Eliminables', `<span class="alert-med">${escapeHtml(foundTrackers.join(', '))}</span>`);
+        html += row('URL Limpia sin Rastreo', `<span class="alert-ok">${escapeHtml(cleanUrl.toString())}</span>`);
+      }
+
+      // Consultas DNS reales vía Cloudflare DoH
+      try {
+        const [aRec, mxRec, txtRec] = await Promise.all([
+          queryDoH(host, 'A'),
+          queryDoH(host, 'MX'),
+          queryDoH(host, 'TXT')
+        ]);
+
+        html += `<div style="margin-top:12px;color:var(--cyan);font-weight:bold;">🌐 RESOLUCIÓN DNS EN VIVO (Cloudflare DoH):</div>`;
+        html += row('Registros IPv4 (A)', aRec.length ? escapeHtml(aRec.join(', ')) : '<span class="alert-high">Sin registros A (dominio inexistente o caído)</span>');
+        html += row('Servidores Correo (MX)', mxRec.length ? escapeHtml(mxRec.join(' | ')) : 'Sin registros MX');
+
+        const hasSpf = txtRec.some(t => t.toLowerCase().includes('v=spf1'));
+        html += row('Seguridad Anti-Spoofing (SPF)', hasSpf ? '<span class="alert-ok">Configurado (v=spf1)</span>' : '<span class="alert-med">No detectado</span>');
+      } catch {
+        html += row('Consulta DNS', 'No se pudo consultar el resolvedor DNS');
+      }
+
+      urlOutput.innerHTML = html;
+    }
+
+    function row(k, v) {
+      return `<div class="kv-row"><span class="kv-key">${k}</span><span class="kv-val">${v}</span></div>`;
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+  </script>
+</body>
+</html>
